@@ -34,7 +34,7 @@ events_to_subscribe =   [
 
 # MQTT-Settings:
 broker_ip = "broker.hivemq.com"
-broker_port = 1883
+#broker_port = 1883
 topic_prefix = "https://github.com/AndreasHeine/opcua-sub-to-mqtt/"
 
 ####################################################################################
