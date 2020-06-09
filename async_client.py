@@ -1,3 +1,9 @@
+"""
+TO DO:
+-too much...
+-...
+"""
+
 from asyncio_mqtt import Client as MqttClient, MqttError
 from contextlib import AsyncExitStack, asynccontextmanager
 import asyncio, json
