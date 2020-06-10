@@ -34,8 +34,9 @@ events_to_subscribe =   [
 
 # MQTT-Settings:
 broker_ip = "broker.hivemq.com"
-#broker_port = 1883
+broker_port = 1883
 topic_prefix = "https://github.com/AndreasHeine/opcua-sub-to-mqtt/"
+
 
 ####################################################################################
 # OpcUaClient:
@@ -154,31 +155,63 @@ async def opcua_client():
 # MQTT-Publisher:
 ####################################################################################
 
+class MqttMessage:
+    def __init__(self, topic, payload, qos):
+        self.topic = topic
+        self.payload = payload
+        self.qos = qos
+
+
+
 async def publisher():
+
     async with AsyncExitStack() as stack:
         tasks = set()
         stack.push_async_callback(cancel_tasks, tasks)
-        mqtt_client = MqttClient(broker_ip)
+        mqtt_client = MqttClient(hostname=broker_ip, port=broker_port)
         await stack.enter_async_context(mqtt_client)
 
-        #loop over queue
-        topic = topic_prefix + "nodeid/"
-        message = json.dumps({
-            "node": "ns=0;i=2267",
-            "value": 1234,
-            "data": "asdf"
-            })
-        qos = 1
+        message_list = []
 
-        #build messages to publish list
-        
-        task = asyncio.create_task(post_to_topics(client=mqtt_client, topic=topic, message=message, qos=qos))
+        if datachange_notification_queue:
+            for datachange in datachange_notification_queue:
+                message_list.append(MqttMessage(
+                    topic_prefix + "datachange" + "/",
+                    json.dumps({
+                        "node": str(datachange[0]),
+                        "value": str(datachange[1]),
+                        "data": str(datachange[2])
+                        }),
+                    qos=0
+                    ))
+                datachange_notification_queue.pop(0)
+
+        if event_notification_queue:
+            for event in event_notification_queue:
+                message_list.append(MqttMessage(
+                    topic_prefix + "event" + "/",
+                    json.dumps({"event": str(event)}),
+                    qos=0
+                    ))
+                event_notification_queue.pop(0)
+
+        if status_change_notification_queue:
+            for status in status_change_notification_queue:
+                message_list.append(MqttMessage(
+                    topic_prefix + "status" + "/",
+                    json.dumps({"status": str(status)}),
+                    qos=0
+                    ))
+                status_change_notification_queue.pop(0)
+
+        task = asyncio.create_task(post_to_topics(client=mqtt_client, messages=message_list))
         tasks.add(task)
         await asyncio.gather(*tasks)
 
-async def post_to_topics(client, topic, message, qos):
-        await client.publish(topic, message, qos=qos)
-        await asyncio.sleep(2)
+async def post_to_topics(client, messages):
+    for message in messages:
+        await client.publish(message.topic, message.payload, message.qos)
+        await asyncio.sleep(0)
 
 async def cancel_tasks(tasks):
     for task in tasks:
@@ -188,7 +221,7 @@ async def cancel_tasks(tasks):
         except asyncio.CancelledError:
             pass
 
-async def mqtt_client():
+async def async_mqtt_client():
     while True:
         try:
             await publisher()
@@ -197,11 +230,12 @@ async def mqtt_client():
         finally:
             await asyncio.sleep(3)
 
+
 ####################################################################################
 # Run:
 ####################################################################################
 
 if __name__ == "__main__":
     asyncio.ensure_future(opcua_client())
-    asyncio.ensure_future(mqtt_client())
+    asyncio.ensure_future(async_mqtt_client())
     asyncio.get_event_loop().run_forever()
