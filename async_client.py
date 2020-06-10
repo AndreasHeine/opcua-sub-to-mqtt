@@ -182,25 +182,29 @@ async def publisher():
                         "value": str(datachange[1]),
                         "data": str(datachange[2])
                         }),
-                    qos=0
+                    qos=1
                     ))
                 datachange_notification_queue.pop(0)
+
+        await asyncio.sleep(0)
 
         if event_notification_queue:
             for event in event_notification_queue:
                 message_list.append(MqttMessage(
                     topic_prefix + "event" + "/",
                     json.dumps({"event": str(event)}),
-                    qos=0
+                    qos=1
                     ))
                 event_notification_queue.pop(0)
+
+        await asyncio.sleep(0)
 
         if status_change_notification_queue:
             for status in status_change_notification_queue:
                 message_list.append(MqttMessage(
                     topic_prefix + "status" + "/",
                     json.dumps({"status": str(status)}),
-                    qos=0
+                    qos=1
                     ))
                 status_change_notification_queue.pop(0)
 
@@ -228,7 +232,7 @@ async def async_mqtt_client():
         except MqttError as e:
             print(e)
         finally:
-            await asyncio.sleep(3)
+            await asyncio.sleep(0)
 
 
 ####################################################################################
