@@ -1,12 +1,7 @@
-"""
-TO DO:
--too much...
--...
-"""
-
+import asyncio
+import json
 from asyncio_mqtt import Client as MqttClient, MqttError
 from contextlib import AsyncExitStack, asynccontextmanager
-import asyncio, json
 from asyncua import Client, ua, Node
 from asyncua.common.events import Event
 from datetime import datetime
@@ -90,7 +85,7 @@ async def opcua_client():
             #subscribe all nodes and events
             print("subscribing nodes and events...")
             try:
-                subscription = await client.create_subscription(50, handler)
+                subscription = await client.create_subscription(200, handler)
                 subscription_handle_list = []
                 if nodes_to_subscribe:
                     for node in nodes_to_subscribe:
@@ -196,7 +191,6 @@ async def publisher():
 async def post_to_topics(client, messages):
     for message in messages:
         await client.publish(message.topic, message.payload, message.qos)
-        await asyncio.sleep(0)
 
 async def cancel_tasks(tasks):
     for task in tasks:
@@ -212,7 +206,6 @@ async def async_mqtt_client():
             await publisher()
         except MqttError as e:
             print(e)
-        finally:
             await asyncio.sleep(0)
 
 
