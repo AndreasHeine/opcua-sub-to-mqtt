@@ -35,14 +35,14 @@ async def servicelevel_updater(servicelevel_node):
 
 async def random_updater(random_node):
     while True:
-        await asyncio.sleep(random.randint(1,100)/10) #<-------------
+        await asyncio.sleep(.1) #<-------------
         random_node.set_value(ua.DataValue(ua.Variant(random.randint(70,90), ua.VariantType.UInt64)))
         print(datetime.now(), "datachange")
 
 async def event_gen(myevgen):
         count = 0
         while 1:
-            await asyncio.sleep(random.randint(1,100)/100) #<-------------
+            await asyncio.sleep(.1) #<-------------
             myevgen.event.Message = ua.LocalizedText("MyFirstEvent %d" % count)
             myevgen.event.Severity = count
             myevgen.event.MyNumericProperty = count
@@ -54,9 +54,9 @@ async def event_gen(myevgen):
 async def vars_updater(var_list):
         while 1:
             for each in var_list:
-                each.set_value(random.randint(1,100))
+                each.set_value(0)
             print(datetime.now(), "bulk datachange")
-            await asyncio.sleep(random.randint(1,100)/10)
+            await asyncio.sleep(.1)
 
 async def status_updater(status_node):
     while True:

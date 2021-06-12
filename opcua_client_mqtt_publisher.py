@@ -28,11 +28,13 @@ events_to_subscribe =   [
                         #(eventtype-node-id, event-node-id)
                         ("ns=2;i=1", "ns=2;i=3")
                         ]
+#opcuamsgcount = 0
 
 # MQTT-Settings:
 broker_ip = "broker.hivemq.com"
 broker_port = 1883
 topic_prefix = "https://github.com/AndreasHeine/opcua-sub-to-mqtt/"
+#mqttmsgcount = 0
 
 
 ####################################################################################
@@ -48,14 +50,20 @@ class SubscriptionHandler:
         Callback for asyncua Subscription.
         This method will be called when the Client received a data change message from the Server.
         """
+        #global opcuamsgcount
         async with datachange_notification_queue_lock:
+            #opcuamsgcount += 1
+            #print("OPCUA", opcuamsgcount)
             datachange_notification_queue.append((node, val, data))
 
     async def event_notification(self, event: Event):
         """
         called for every event notification from server
         """
+        #global opcuamsgcount
         async with event_notification_queue_lock:
+            #opcuamsgcount += 1
+            #print("OPCUA", opcuamsgcount)
             event_notification_queue.append(event.get_event_props_as_fields_dict())
 
 async def opcua_client():
@@ -189,7 +197,10 @@ async def publisher():
         await asyncio.gather(*tasks)
 
 async def post_to_topics(client, messages):
+    #global mqttmsgcount
     for message in messages:
+        #mqttmsgcount += 1
+        #print("MQTT", mqttmsgcount)
         await client.publish(message.topic, message.payload, message.qos)
 
 async def cancel_tasks(tasks):
