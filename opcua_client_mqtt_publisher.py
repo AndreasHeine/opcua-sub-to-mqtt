@@ -110,7 +110,7 @@ async def opcua_client():
                 case = 4
                 await asyncio.sleep(0)
         elif case == 3:
-            #running => read cyclic the service level if it fails disconnect and unsubscribe => wait 5s => connect
+            #running => read cyclic the service level if it fails disconnect and unsubscribe => wait => connect
             try:
                 service_level = await client.get_node("ns=0;i=2267").get_value()
                 if service_level >= 200:
