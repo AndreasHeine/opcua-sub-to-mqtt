@@ -14,7 +14,7 @@ async def main():
     uri = "https://github.com/AndreasHeine/opcua-sub-to-mqtt/"
     idx = await server.register_namespace(uri)
     myobj = await server.nodes.objects.add_object(idx, "MyObject")
-    var = await myobj.add_variable(idx, "Coutn", 0, ua.VariantType.UInt64)
+    var = await myobj.add_variable(idx, "Count", 0, ua.VariantType.UInt64)
 
     etype = await server.create_custom_event_type(
         idx, 'MyFirstEvent', ua.ObjectIds.BaseEventType,

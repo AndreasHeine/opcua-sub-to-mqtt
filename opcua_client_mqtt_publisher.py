@@ -26,7 +26,7 @@ nodes_to_subscribe =    [
                         "ns=0;i=2259",                       
                         ]
 events_to_subscribe =   [
-                        #(eventtype-node-id, event-node-id)
+                        #(EventSource-NodeId, EventType-NodeId)
                         ("ns=2;i=1", "ns=2;i=3")
                         ]
 #opcuamsgcount = 0
