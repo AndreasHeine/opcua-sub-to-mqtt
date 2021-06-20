@@ -38,6 +38,46 @@ topic_prefix = "https://github.com/AndreasHeine/opcua-sub-to-mqtt/"
 
 
 ####################################################################################
+# Factories:
+####################################################################################
+
+def makeDictFromVariant(Variant):
+    '''
+    makes a simple dict from Variant-Class 
+    ! only for opc ua built in types !
+    '''
+    return {
+        "Value": Variant.Value,
+        "ArrayDimensions": Variant.Dimensions,
+    }
+
+def makeDictFromDataValue(DataValue):
+    '''
+    makes a simple dict from DataValue-Class 
+    ! only for opc ua built in types !
+    '''
+    return {
+        "EncodingMask": DataValue.Encoding,
+        "Value": makeDictFromVariant(DataValue.Value),
+        "Status": {
+            "Value": DataValue.StatusCode.value,
+            "Text": DataValue.StatusCode.name,
+            "Info": DataValue.StatusCode.doc,
+        },
+        "SourceTimestamp": DataValue.SourceTimestamp,
+        "ServerTimestamp": DataValue.ServerTimestamp,
+    }
+
+# TODO:
+def makeDictFromEventData(Event):
+    pass
+
+def makeJsonStringFromDict(d):
+    if not isinstance(d, dict): raise ValueError(f"{type(d)} is not a dict!")
+    return json.dumps(d)
+
+
+####################################################################################
 # OpcUaClient:
 ####################################################################################
 
@@ -112,7 +152,7 @@ async def opcua_client():
         elif case == 3:
             #running => read cyclic the service level if it fails disconnect and unsubscribe => wait => connect
             try:
-                service_level = await client.get_node("ns=0;i=2267").get_value()
+                service_level = await client.get_node("ns=0;i=2267").read_value()
                 if service_level >= 200:
                     case = 3
                 else:
@@ -171,28 +211,33 @@ async def publisher():
                 for datachange in datachange_notification_queue:
                     message_list.append(MqttMessage(
                         topic_prefix + "datachange" + "/",
-                        json.dumps({
-                            "node": str(datachange[0]),
-                            "value": str(datachange[1]),
-                            "data": str(datachange[2])
-                            }),
+                        makeJsonStringFromDict(
+                            makeDictFromDataValue(
+                                datachange[2].monitored_item.Value
+                                )
+                            ),
                         qos=1
-                        ))
+                        )
+                    )
                     datachange_notification_queue.pop(0)
-
-            await asyncio.sleep(0)
 
         if event_notification_queue:
             async with event_notification_queue_lock:
                 for event in event_notification_queue:
                     message_list.append(MqttMessage(
                         topic_prefix + "event" + "/",
+                        # TODO: Format event in JSON
                         json.dumps({"event": str(event)}),
                         qos=1
                         ))
                     event_notification_queue.pop(0)
 
-        task = asyncio.create_task(post_to_topics(client=mqtt_client, messages=message_list))
+        task = asyncio.create_task(
+            post_to_topics(
+                client=mqtt_client, 
+                messages=message_list
+                )
+            )
         tasks.add(task)
         await asyncio.gather(*tasks)
 
