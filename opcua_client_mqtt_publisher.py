@@ -4,7 +4,7 @@ from asyncio_mqtt import Client as MqttClient, MqttError
 from contextlib import AsyncExitStack, asynccontextmanager
 from asyncua import Client, ua, Node
 from asyncua.common.events import Event
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 ####################################################################################
@@ -64,8 +64,8 @@ def makeDictFromDataValue(DataValue):
             "Text": DataValue.StatusCode.name,
             "Info": DataValue.StatusCode.doc,
         },
-        "SourceTimestamp": DataValue.SourceTimestamp,
-        "ServerTimestamp": DataValue.ServerTimestamp,
+        "SourceTimestamp": str(DataValue.SourceTimestamp.replace(tzinfo=timezone.utc).timestamp()) if DataValue.SourceTimestamp else None,
+        "ServerTimestamp": str(DataValue.ServerTimestamp.replace(tzinfo=timezone.utc).timestamp()) if DataValue.ServerTimestamp else None,
     }
 
 # TODO:
