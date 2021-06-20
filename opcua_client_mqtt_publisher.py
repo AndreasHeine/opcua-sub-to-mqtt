@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 
 # OPC UA Client
 server_url = "opc.tcp://127.0.0.1:4840"
-server_name = "Test-Server1"
 datachange_notification_queue_lock = asyncio.Lock()
 event_notification_queue_lock = asyncio.Lock()
 datachange_notification_queue = []
@@ -34,9 +33,7 @@ events_to_subscribe =   [
 # MQTT-Settings:
 broker_ip = "broker.hivemq.com"
 broker_port = 1883
-topic_prefix = f"https://github.com/AndreasHeine/opcua-sub-to-mqtt/{server_name}/"
-#mqttmsgcount = 0
-
+topic_prefix = "https://github.com/AndreasHeine/opcua-sub-to-mqtt/"
 
 ####################################################################################
 # Factories:
@@ -54,9 +51,15 @@ def makeDictFromVariant(Variant):
 
 def makeDictFromLocalizedText(LocalizedText):
     return {
-        "Locale": LocalizedText.Locale,
-        "Text": LocalizedText.Text,
+        "Locale": str(LocalizedText.Locale),
+        "Text": str(LocalizedText.Text),
     }
+
+def makeDictFromStatusCode(StatusCode):
+    return {
+            "Value": StatusCode.value,
+            "Text": str(StatusCode.name),
+        }
 
 def makeDictFromDataValue(DataValue):
     '''
@@ -64,13 +67,8 @@ def makeDictFromDataValue(DataValue):
     ! only for opc ua built in types !
     '''
     return {
-        "EncodingMask": DataValue.Encoding,
         "Value": makeDictFromVariant(DataValue.Value),
-        "Status": {
-            "Value": DataValue.StatusCode.value,
-            "Text": DataValue.StatusCode.name,
-            "Info": DataValue.StatusCode.doc,
-        },
+        "Status": makeDictFromStatusCode(DataValue.StatusCode),
         "SourceTimestamp": str(DataValue.SourceTimestamp.replace(tzinfo=timezone.utc).timestamp()) if DataValue.SourceTimestamp else None,
         "ServerTimestamp": str(DataValue.ServerTimestamp.replace(tzinfo=timezone.utc).timestamp()) if DataValue.ServerTimestamp else None,
     }
@@ -101,21 +99,16 @@ class SubscriptionHandler:
         Callback for asyncua Subscription.
         This method will be called when the Client received a data change message from the Server.
         """
-        #global opcuamsgcount
         async with datachange_notification_queue_lock:
-            #opcuamsgcount += 1
-            #print("OPCUA", opcuamsgcount)
             datachange_notification_queue.append((node, val, data))
 
     async def event_notification(self, event: Event):
         """
         called for every event notification from server
         """
-        #global opcuamsgcount
         async with event_notification_queue_lock:
-            #opcuamsgcount += 1
-            #print("OPCUA", opcuamsgcount)
             event_notification_queue.append(event.get_event_props_as_fields_dict())
+
 
 async def opcua_client():
     """
@@ -207,8 +200,8 @@ class MqttMessage:
         self.payload = payload
         self.qos = qos
 
-async def publisher():
 
+async def publisher():
     async with AsyncExitStack() as stack:
         tasks = set()
         stack.push_async_callback(cancel_tasks, tasks)
@@ -220,6 +213,7 @@ async def publisher():
         if datachange_notification_queue:
             async with datachange_notification_queue_lock:
                 for datachange in datachange_notification_queue:
+                    # datachange -> (node, val, data)
                     message_list.append(MqttMessage(
                         topic_prefix  + "datachange/" + f"{datachange[0].nodeid}/",
                         makeJsonStringFromDict(
@@ -235,8 +229,9 @@ async def publisher():
         if event_notification_queue:
             async with event_notification_queue_lock:
                 for event in event_notification_queue:
+                    # event -> event.get_event_props_as_fields_dict()
                     message_list.append(MqttMessage(
-                        topic_prefix + "event/" + f"{event['SourceNode'].Value}/",
+                        topic_prefix + "event/" + f"{event['SourceName'].Value}/",
                         makeJsonStringFromDict(
                             makeDictFromEventData(event)
                         ),
@@ -254,10 +249,7 @@ async def publisher():
         await asyncio.gather(*tasks)
 
 async def post_to_topics(client, messages):
-    #global mqttmsgcount
     for message in messages:
-        #mqttmsgcount += 1
-        #print("MQTT", mqttmsgcount)
         await client.publish(message.topic, message.payload, message.qos)
 
 async def cancel_tasks(tasks):
@@ -275,7 +267,6 @@ async def async_mqtt_client():
         except MqttError as e:
             print(e)
             await asyncio.sleep(0)
-
 
 ####################################################################################
 # Run:
