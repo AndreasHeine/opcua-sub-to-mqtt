@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 
 # OPC UA Client
 server_url = "opc.tcp://127.0.0.1:4840"
+server_name = "Test-Server1"
 datachange_notification_queue_lock = asyncio.Lock()
 event_notification_queue_lock = asyncio.Lock()
 datachange_notification_queue = []
@@ -33,7 +34,7 @@ events_to_subscribe =   [
 # MQTT-Settings:
 broker_ip = "broker.hivemq.com"
 broker_port = 1883
-topic_prefix = "https://github.com/AndreasHeine/opcua-sub-to-mqtt/"
+topic_prefix = f"https://github.com/AndreasHeine/opcua-sub-to-mqtt/{server_name}/"
 #mqttmsgcount = 0
 
 
@@ -49,6 +50,12 @@ def makeDictFromVariant(Variant):
     return {
         "Value": Variant.Value,
         "ArrayDimensions": Variant.Dimensions,
+    }
+
+def makeDictFromLocalizedText(LocalizedText):
+    return {
+        "Locale": LocalizedText.Locale,
+        "Text": LocalizedText.Text,
     }
 
 def makeDictFromDataValue(DataValue):
@@ -68,9 +75,13 @@ def makeDictFromDataValue(DataValue):
         "ServerTimestamp": str(DataValue.ServerTimestamp.replace(tzinfo=timezone.utc).timestamp()) if DataValue.ServerTimestamp else None,
     }
 
-# TODO:
 def makeDictFromEventData(Event):
-    pass
+    return {
+        "SourceName": str(Event["SourceName"].Value),
+        "SourceNode": str(Event["SourceNode"].Value),
+        "Severity": makeDictFromVariant(Event["Severity"]),
+        "Message": makeDictFromLocalizedText(Event["Message"].Value),
+    }
 
 def makeJsonStringFromDict(d):
     if not isinstance(d, dict): raise ValueError(f"{type(d)} is not a dict!")
@@ -210,7 +221,7 @@ async def publisher():
             async with datachange_notification_queue_lock:
                 for datachange in datachange_notification_queue:
                     message_list.append(MqttMessage(
-                        topic_prefix + "datachange" + "/",
+                        topic_prefix  + "datachange/" + f"{datachange[0].nodeid}/",
                         makeJsonStringFromDict(
                             makeDictFromDataValue(
                                 datachange[2].monitored_item.Value
@@ -225,9 +236,10 @@ async def publisher():
             async with event_notification_queue_lock:
                 for event in event_notification_queue:
                     message_list.append(MqttMessage(
-                        topic_prefix + "event" + "/",
-                        # TODO: Format event in JSON
-                        json.dumps({"event": str(event)}),
+                        topic_prefix + "event/" + f"{event['SourceNode'].Value}/",
+                        makeJsonStringFromDict(
+                            makeDictFromEventData(event)
+                        ),
                         qos=1
                         ))
                     event_notification_queue.pop(0)
