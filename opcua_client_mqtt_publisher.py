@@ -27,7 +27,6 @@ events_to_subscribe =   [
                         #(EventSource-NodeId, EventType-NodeId)
                         ("ns=2;i=1", "ns=2;i=3")
                         ]
-#opcuamsgcount = 0
 
 # MQTT-Settings:
 broker_ip = "broker.hivemq.com"
