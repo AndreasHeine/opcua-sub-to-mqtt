@@ -17,7 +17,6 @@ datachange_notification_queue_lock = asyncio.Lock()
 event_notification_queue_lock = asyncio.Lock()
 datachange_notification_queue = []
 event_notification_queue = []
-status_change_notification_queue = []
 nodes_to_subscribe =    [
                         #node-id
                         "ns=2;i=2", 
