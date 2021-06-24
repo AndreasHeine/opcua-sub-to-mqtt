@@ -149,7 +149,8 @@ async def opcua_client():
                 subscription_handle_list = []
                 node_handles = await subscription.subscribe_data_change(
                     nodes=nodes, 
-                    attr=ua.AttributeIds.Value, queuesize=50, 
+                    attr=ua.AttributeIds.Value, 
+                    queuesize=50, 
                     monitoring=ua.MonitoringMode.Reporting
                 )
                 subscription_handle_list.append(node_handles)
