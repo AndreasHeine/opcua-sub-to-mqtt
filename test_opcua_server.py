@@ -32,7 +32,7 @@ async def main():
     async with server:
         count = 0
         while True:
-            await asyncio.sleep(1)
+            await asyncio.sleep(.1)
             myevgen.event.Message = ua.LocalizedText("MyFirstEvent %d" % count)
             myevgen.event.Severity = count
             myevgen.event.MyNumericProperty = count

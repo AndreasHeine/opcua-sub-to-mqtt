@@ -119,6 +119,12 @@ async def opcua_client():
     case = 0
     subscription_handle_list = []
     idx = 0
+
+    nodes = []
+    if nodes_to_subscribe:
+        for node in nodes_to_subscribe:
+            nodes.append(client.get_node(node))
+
     while 1:
         if case == 1:
             #connect
@@ -135,15 +141,26 @@ async def opcua_client():
             #subscribe all nodes and events
             print("subscribing nodes and events...")
             try:
-                subscription = await client.create_subscription(200, handler)
+                subscription = await client.create_subscription(
+                    period=500, 
+                    handler=handler, 
+                    publishing=True
+                )
                 subscription_handle_list = []
-                if nodes_to_subscribe:
-                    for node in nodes_to_subscribe:
-                        handle = await subscription.subscribe_data_change(client.get_node(node))
-                        subscription_handle_list.append(handle)
+                node_handles = await subscription.subscribe_data_change(
+                    nodes=nodes, 
+                    attr=ua.AttributeIds.Value, queuesize=50, 
+                    monitoring=ua.MonitoringMode.Reporting
+                )
+                subscription_handle_list.append(node_handles)
                 if events_to_subscribe:
                     for event in events_to_subscribe:
-                        handle = await subscription.subscribe_events(event[0], event[1])
+                        handle = await subscription.subscribe_events(
+                            sourcenode=event[0], 
+                            evtypes=event[1], 
+                            evfilter=None, 
+                            queuesize=20
+                        )
                         subscription_handle_list.append(handle)
                 print("subscribed!")
                 case = 3
@@ -167,8 +184,7 @@ async def opcua_client():
             print("unsubscribing...")
             try:
                 if subscription_handle_list:
-                    for handle in subscription_handle_list:
-                        await subscription.unsubscribe(handle)
+                    await subscription.unsubscribe(subscription_handle_list)
                 await subscription.delete()
                 print("unsubscribed!")
             except:
