@@ -222,7 +222,6 @@ async def publisher():
         stack.push_async_callback(cancel_tasks, tasks)
         mqtt_client = MqttClient(hostname=broker_ip, port=broker_port)
         await stack.enter_async_context(mqtt_client)
-
         message_list = []
 
         if datachange_notification_queue:
@@ -230,8 +229,8 @@ async def publisher():
                 for datachange in datachange_notification_queue:
                     # datachange -> (node, val, data)
                     message_list.append(MqttMessage(
-                        topic_prefix  + "datachange/" + f"{datachange[0].nodeid}/",
-                        makeJsonStringFromDict(
+                        topic=f"{topic_prefix}datachange/{datachange[0].nodeid}/",
+                        payload=makeJsonStringFromDict(
                             makeDictFromDataValue(
                                 datachange[2].monitored_item.Value
                                 )
@@ -246,8 +245,8 @@ async def publisher():
                 for event in event_notification_queue:
                     # event -> event.get_event_props_as_fields_dict()
                     message_list.append(MqttMessage(
-                        topic_prefix + "event/" + f"{event['SourceName'].Value}/",
-                        makeJsonStringFromDict(
+                        topic=f"{topic_prefix}event/{event['SourceName'].Value}",
+                        payload=makeJsonStringFromDict(
                             makeDictFromEventData(event)
                         ),
                         qos=1
