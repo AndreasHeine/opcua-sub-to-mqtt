@@ -210,10 +210,11 @@ async def opcua_client():
 ####################################################################################
 
 class MqttMessage:
-    def __init__(self, topic, payload, qos):
+    def __init__(self, topic, payload, qos, retain=False):
         self.topic = topic
         self.payload = payload
         self.qos = qos
+        self.retain = retain
 
 
 async def publisher():
@@ -235,7 +236,8 @@ async def publisher():
                                 datachange[2].monitored_item.Value
                                 )
                             ),
-                        qos=1
+                        qos=1,
+                        retain=True
                         )
                     )
                     datachange_notification_queue.pop(0)
@@ -264,7 +266,7 @@ async def publisher():
 
 async def post_to_topics(client, messages):
     for message in messages:
-        await client.publish(message.topic, message.payload, message.qos)
+        await client.publish(message.topic, message.payload, message.qos, message.retain)
 
 async def cancel_tasks(tasks):
     for task in tasks:
