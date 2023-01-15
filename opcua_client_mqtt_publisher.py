@@ -17,11 +17,20 @@ from datetime import timezone
 # OPC UA Client
 server_url = "opc.tcp://127.0.0.1:4840"
 send_queue = asyncio.Queue()
+topic_mapping = {
+    # Nodes
+    "ns=2;i=2": "demo/opcua-sub-to-mqtt/datachange/Count",
+    "i=2267": "demo/opcua-sub-to-mqtt/datachange/ServiceLevel",
+    "i=2259": "demo/opcua-sub-to-mqtt/datachange/ServerState",
+    # Events
+    "i=2253": "demo/opcua-sub-to-mqtt/event/MyObject"
+}
+
 nodes_to_subscribe =    [
                         #node-id
                         "ns=2;i=2", 
-                        "ns=0;i=2267", 
-                        "ns=0;i=2259",                       
+                        "i=2267", 
+                        "i=2259",                       
                         ]
 events_to_subscribe =   [
                         #(EventSource-NodeId, EventType-NodeId)
@@ -31,7 +40,6 @@ events_to_subscribe =   [
 # MQTT-Settings:
 broker_ip = "broker.hivemq.com"
 broker_port = 1883
-topic_prefix = "https://github.com/AndreasHeine/opcua-sub-to-mqtt/"
 
 ####################################################################################
 # Factories:
@@ -98,7 +106,7 @@ class SubscriptionHandler:
         This method will be called when the Client received a data change message from the Server.
         """
         msg = MqttMessage(
-            topic=f"{topic_prefix}datachange/{node.nodeid}/value",
+            topic=topic_mapping.get(node.nodeid.to_string()),
             payload=makeJsonStringFromDict(
                 makeDictFromDataValue(
                     data.monitored_item.Value
@@ -115,7 +123,7 @@ class SubscriptionHandler:
         """
         fields = event.get_event_props_as_fields_dict()
         msg = MqttMessage(
-            topic=f"{topic_prefix}event/{fields['SourceName'].Value}",
+            topic=topic_mapping.get(event.emitting_node.to_string()),
             payload=makeJsonStringFromDict(
                 makeDictFromEventData(
                     fields
@@ -124,6 +132,13 @@ class SubscriptionHandler:
             qos=1
         )
         await send_queue.put(msg)
+
+    async def status_change_notification(self, status: ua.StatusChangeNotification):
+        """
+        called for every status change notification from server
+        """
+        print("StatusChangeNotification: ", status)
+        pass
 
 
 async def opcua_client():
@@ -160,7 +175,7 @@ async def opcua_client():
             print("subscribing nodes and events...")
             try:
                 subscription = await client.create_subscription(
-                    period=500, 
+                    period=2000, 
                     handler=handler, 
                     publishing=True
                 )
@@ -168,7 +183,7 @@ async def opcua_client():
                 node_handles = await subscription.subscribe_data_change(
                     nodes=nodes, 
                     attr=ua.AttributeIds.Value, 
-                    queuesize=50, 
+                    queuesize=100, 
                     monitoring=ua.MonitoringMode.Reporting
                 )
                 subscription_handle_list.append(node_handles)
@@ -178,7 +193,7 @@ async def opcua_client():
                             sourcenode=event[0], 
                             evtypes=event[1], 
                             evfilter=None, 
-                            queuesize=20
+                            queuesize=50
                         )
                         subscription_handle_list.append(handle)
                 print("subscribed!")
@@ -247,7 +262,7 @@ async def publisher():
 
         await asyncio.gather(*tasks)
 
-async def publish_messages(client: Client, queue: asyncio.Queue[MqttMessage]):
+async def publish_messages(client: MqttClient, queue: asyncio.Queue[MqttMessage]):
     while True:
         get = asyncio.create_task(
             queue.get()
@@ -256,7 +271,7 @@ async def publish_messages(client: Client, queue: asyncio.Queue[MqttMessage]):
             (get, client._disconnected), return_when=asyncio.FIRST_COMPLETED
         )
         if get in done:
-            message = get.result()
+            message: MqttMessage = get.result()
             await client.publish(message.topic, message.payload, message.qos, message.retain)
         
 async def cancel_tasks(tasks):
@@ -273,7 +288,7 @@ async def async_mqtt_client():
             await publisher()
         except MqttError as e:
             print(e)
-            await asyncio.sleep(0)
+            await asyncio.sleep(3)
 
 ####################################################################################
 # Run:
