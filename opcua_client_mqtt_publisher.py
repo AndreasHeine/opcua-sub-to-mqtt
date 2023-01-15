@@ -1,10 +1,13 @@
+from sys import platform
+from os import name
 import asyncio
 import json
 from asyncio_mqtt import Client as MqttClient, MqttError
-from contextlib import AsyncExitStack, asynccontextmanager
+from contextlib import AsyncExitStack
 from asyncua import Client, ua, Node
 from asyncua.common.events import Event
-from datetime import datetime, timezone
+from asyncua.common.subscription import DataChangeNotif
+from datetime import timezone
 
 
 ####################################################################################
@@ -13,10 +16,7 @@ from datetime import datetime, timezone
 
 # OPC UA Client
 server_url = "opc.tcp://127.0.0.1:4840"
-datachange_notification_queue_lock = asyncio.Lock()
-event_notification_queue_lock = asyncio.Lock()
-datachange_notification_queue = []
-event_notification_queue = []
+send_queue = asyncio.Queue()
 nodes_to_subscribe =    [
                         #node-id
                         "ns=2;i=2", 
@@ -92,20 +92,38 @@ class SubscriptionHandler:
     """
     The SubscriptionHandler is used to handle the data that is received for the subscription.
     """
-    async def datachange_notification(self, node: Node, val, data):
+    async def datachange_notification(self, node: Node, val, data: DataChangeNotif):
         """
         Callback for asyncua Subscription.
         This method will be called when the Client received a data change message from the Server.
         """
-        async with datachange_notification_queue_lock:
-            datachange_notification_queue.append((node, val, data))
+        msg = MqttMessage(
+            topic=f"{topic_prefix}datachange/{node.nodeid}/value",
+            payload=makeJsonStringFromDict(
+                makeDictFromDataValue(
+                    data.monitored_item.Value
+                    )
+                ),
+            qos=1,
+            retain=True
+        )
+        await send_queue.put(msg)
 
     async def event_notification(self, event: Event):
         """
         called for every event notification from server
         """
-        async with event_notification_queue_lock:
-            event_notification_queue.append(event.get_event_props_as_fields_dict())
+        fields = event.get_event_props_as_fields_dict()
+        msg = MqttMessage(
+            topic=f"{topic_prefix}event/{fields['SourceName'].Value}",
+            payload=makeJsonStringFromDict(
+                makeDictFromEventData(
+                    fields
+                )
+            ),
+            qos=1
+        )
+        await send_queue.put(msg)
 
 
 async def opcua_client():
@@ -223,51 +241,24 @@ async def publisher():
         stack.push_async_callback(cancel_tasks, tasks)
         mqtt_client = MqttClient(hostname=broker_ip, port=broker_port)
         await stack.enter_async_context(mqtt_client)
-        message_list = []
 
-        if datachange_notification_queue:
-            async with datachange_notification_queue_lock:
-                for datachange in datachange_notification_queue:
-                    # datachange -> (node, val, data)
-                    message_list.append(MqttMessage(
-                        topic=f"{topic_prefix}datachange/{datachange[0].nodeid}/",
-                        payload=makeJsonStringFromDict(
-                            makeDictFromDataValue(
-                                datachange[2].monitored_item.Value
-                                )
-                            ),
-                        qos=1,
-                        retain=True
-                        )
-                    )
-                    datachange_notification_queue.pop(0)
-
-        if event_notification_queue:
-            async with event_notification_queue_lock:
-                for event in event_notification_queue:
-                    # event -> event.get_event_props_as_fields_dict()
-                    message_list.append(MqttMessage(
-                        topic=f"{topic_prefix}event/{event['SourceName'].Value}",
-                        payload=makeJsonStringFromDict(
-                            makeDictFromEventData(event)
-                        ),
-                        qos=1
-                        ))
-                    event_notification_queue.pop(0)
-
-        task = asyncio.create_task(
-            post_to_topics(
-                client=mqtt_client, 
-                messages=message_list
-                )
-            )
+        task = asyncio.create_task(publish_messages(mqtt_client, send_queue))
         tasks.add(task)
+
         await asyncio.gather(*tasks)
 
-async def post_to_topics(client, messages):
-    for message in messages:
-        await client.publish(message.topic, message.payload, message.qos, message.retain)
-
+async def publish_messages(client: Client, queue: asyncio.Queue[MqttMessage]):
+    while True:
+        get = asyncio.create_task(
+            queue.get()
+        )
+        done, _ = await asyncio.wait(
+            (get, client._disconnected), return_when=asyncio.FIRST_COMPLETED
+        )
+        if get in done:
+            message = get.result()
+            await client.publish(message.topic, message.payload, message.qos, message.retain)
+        
 async def cancel_tasks(tasks):
     for task in tasks:
         task.cancel()
@@ -288,7 +279,16 @@ async def async_mqtt_client():
 # Run:
 ####################################################################################
 
+async def main():
+    task1 = asyncio.create_task(opcua_client())
+    task2 = asyncio.create_task(async_mqtt_client())
+    await asyncio.gather(task1, task2)
+
 if __name__ == "__main__":
-    asyncio.ensure_future(opcua_client())
-    asyncio.ensure_future(async_mqtt_client())
-    asyncio.get_event_loop().run_forever()
+    if platform.lower() == "win32" or name.lower() == "nt":
+        from asyncio import (
+            set_event_loop_policy,
+            WindowsSelectorEventLoopPolicy
+        )
+        set_event_loop_policy(WindowsSelectorEventLoopPolicy())
+    asyncio.run(main())

@@ -39,7 +39,7 @@ async def main():
             myevgen.event.MyStringProperty = "Property %d" % count
             await myevgen.trigger()
             await mysecondevgen.trigger(message="MySecondEvent %d" % count)
-            await var.write_value(count)
+            await var.write_value(ua.Variant(count, ua.VariantType.UInt64))
             count += 1
 
 
