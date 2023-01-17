@@ -1,7 +1,7 @@
-# opcua-sub-to-mqtt
-  
-## This Repository is not related to OPC UA Pub/Sub! I am using i custom JSON-Format.  
-  
+## This Repository is not related to OPC UA Part 14 (Pub/Sub)! I am using i custom JSON-Format.  
+ 
+# opcua-sub-to-mqtt 
+ 
 ### OPC UA Server -> OPC UA Client / MQTT Publisher -> MQTT Broker  
   
 Its a small example how to forward OPC UA Subscription Notifications to MQTT in a uniform way (e.g. in a Unified-Namespace).  
