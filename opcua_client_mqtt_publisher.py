@@ -3,6 +3,7 @@ from os import name
 import asyncio
 import json
 from asyncio_mqtt import Client as MqttClient, MqttError
+from typing import Dict
 from contextlib import AsyncExitStack
 from asyncua import Client, ua, Node
 from asyncua.common.events import Event
@@ -17,14 +18,6 @@ from datetime import timezone
 # OPC UA Client
 server_url = "opc.tcp://127.0.0.1:4840"
 send_queue = asyncio.Queue()
-topic_mapping = {
-    # Nodes
-    "ns=2;i=2": "demo/opcua-sub-to-mqtt/datachange/Count",
-    "i=2267": "demo/opcua-sub-to-mqtt/datachange/ServiceLevel",
-    "i=2259": "demo/opcua-sub-to-mqtt/datachange/ServerState",
-    # Events
-    "i=2253": "demo/opcua-sub-to-mqtt/event/MyObject"
-}
 
 nodes_to_subscribe =    [
                         #node-id
@@ -34,7 +27,8 @@ nodes_to_subscribe =    [
                         ]
 events_to_subscribe =   [
                         #(EventSource-NodeId, EventType-NodeId)
-                        ("ns=2;i=1", "ns=2;i=3")
+                        ("ns=2;i=1", "ns=2;i=3"),
+                        ("ns=2;i=1", "ns=2;i=6")
                         ]
 
 # MQTT-Settings:
@@ -45,47 +39,60 @@ broker_port = 1883
 # Factories:
 ####################################################################################
 
-def makeDictFromVariant(Variant):
+def makeDictFromVariant(v: ua.Variant):
     '''
     makes a simple dict from Variant-Class 
     ! only for opc ua built in types !
     '''
     return {
-        "Value": Variant.Value,
-        "ArrayDimensions": Variant.Dimensions,
+        "Value": str(v.Value),
+        "ArrayDimensions": str(v.Dimensions),
+        "VariantType": {
+            "Value": str(v.VariantType.value),
+            "Name": str(v.VariantType.name)
+        }
     }
 
-def makeDictFromLocalizedText(LocalizedText):
+def makeDictFromLocalizedText(lt: ua.LocalizedText):
     return {
-        "Locale": str(LocalizedText.Locale),
-        "Text": str(LocalizedText.Text),
+        "Locale": str(lt.Locale),
+        "Text": str(lt.Text),
     }
 
-def makeDictFromStatusCode(StatusCode):
+def makeDictFromStatusCode(st: ua.StatusCode):
     return {
-            "Value": StatusCode.value,
-            "Text": str(StatusCode.name),
+            "Value": str(st.value),
+            "Text": str(st.name),
         }
 
-def makeDictFromDataValue(DataValue):
+def makeDictFromDataValue(dv: ua.DataValue):
     '''
     makes a simple dict from DataValue-Class 
     ! only for opc ua built in types !
     '''
     return {
-        "Value": makeDictFromVariant(DataValue.Value),
-        "Status": makeDictFromStatusCode(DataValue.StatusCode),
-        "SourceTimestamp": str(DataValue.SourceTimestamp.replace(tzinfo=timezone.utc).timestamp()) if DataValue.SourceTimestamp else None,
-        "ServerTimestamp": str(DataValue.ServerTimestamp.replace(tzinfo=timezone.utc).timestamp()) if DataValue.ServerTimestamp else None,
+        "Value": makeDictFromVariant(dv.Value),
+        "Status": makeDictFromStatusCode(dv.StatusCode),
+        "SourceTimestamp": str(dv.SourceTimestamp.replace(tzinfo=timezone.utc).timestamp()) if dv.SourceTimestamp else None,
+        "ServerTimestamp": str(dv.ServerTimestamp.replace(tzinfo=timezone.utc).timestamp()) if dv.ServerTimestamp else None,
     }
 
-def makeDictFromEventData(Event):
-    return {
-        "SourceName": str(Event["SourceName"].Value),
-        "SourceNode": str(Event["SourceNode"].Value),
-        "Severity": makeDictFromVariant(Event["Severity"]),
-        "Message": makeDictFromLocalizedText(Event["Message"].Value),
+def makeDictFromEventData(event: Dict[str, ua.Variant]):
+    fields = {
+        "EventType": str(event["EventType"].Value.to_string()),
+        "SourceName": str(event["SourceName"].Value),
+        "SourceNode": str(event["SourceNode"].Value.to_string()),
+        "Severity": makeDictFromVariant(event["Severity"]),
+        "Message": makeDictFromLocalizedText(event["Message"].Value),
+        "LocalTime": {
+            "Offset": str(event["LocalTime"].Value.Offset),
+            "DaylightSavingInOffset": str(event["LocalTime"].Value.DaylightSavingInOffset)
+        }
     }
+    for key in event.keys():
+        if key not in ["SourceName", "SourceNode", "Severity", "Message", "LocalTime", "EventType"]:
+            fields[key] = makeDictFromVariant(event[key])
+    return fields
 
 def makeJsonStringFromDict(d):
     if not isinstance(d, dict): raise ValueError(f"{type(d)} is not a dict!")
@@ -106,7 +113,7 @@ class SubscriptionHandler:
         This method will be called when the Client received a data change message from the Server.
         """
         msg = MqttMessage(
-            topic=topic_mapping.get(node.nodeid.to_string()),
+            topic=f"demo/opcua-sub-to-mqtt/variables/{node.nodeid.to_string()}",
             payload=makeJsonStringFromDict(
                 makeDictFromDataValue(
                     data.monitored_item.Value
@@ -123,7 +130,7 @@ class SubscriptionHandler:
         """
         fields = event.get_event_props_as_fields_dict()
         msg = MqttMessage(
-            topic=topic_mapping.get(event.emitting_node.to_string()),
+            topic=f"demo/opcua-sub-to-mqtt/events/{str(event.SourceName).lower()}",
             payload=makeJsonStringFromDict(
                 makeDictFromEventData(
                     fields
